@@ -1,0 +1,18 @@
+{
+  "HALProvider": {
+    "Other Devices": {
+      "navX-Sensor[0]": {
+        "header": {
+          "open": true
+        }
+      }
+    }
+  },
+  "NTProvider": {
+    "types": {
+      "/FMSInfo": "FMSInfo",
+      "/Shuffleboard/Pose Estimation/Pose Estimate": "Field2d",
+      "/Shuffleboard/Pose Estimation/Sensors/NavX2": "Gyro"
+    }
+  }
+}
