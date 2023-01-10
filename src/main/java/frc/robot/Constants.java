@@ -18,7 +18,7 @@ import edu.wpi.first.math.geometry.Rotation3d;
  * constants are needed, to reduce verbosity.
  */
 public final class Constants {
-  public final class Canid{
+  public static final class Canid{
     public static final int leftTalonLead = 2;
     public static final int leftTalonFollow = 3;
     public static final int rightTalonLead = 0;
@@ -37,8 +37,9 @@ public final class Constants {
       public static final double wheelCircumferenceMeters = Units.inchesToMeters(6*Math.PI);
       public static final double trackWidthMeters = Units.inchesToMeters(30);
       //TODO Measure this accurately
-      public static final Transform3d aprilTagCameraPositionTransform = new Transform3d(
-        new Translation3d(-0.5, 0.0, 0.5), new Rotation3d(0,0,0)); //Cam mounted facing forward, half a meter behind center, half a meter up from center.
+      public static final Transform3d aprilTagCameraPositionTransform = new Transform3d( //Cam mounted facing forward, half a meter behind center, half a meter up from center.
+        new Translation3d(-0.5, 0.0, 0.5),
+        new Rotation3d(0,0,0));
     }
   }
 }

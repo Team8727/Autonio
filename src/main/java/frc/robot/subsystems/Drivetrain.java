@@ -129,8 +129,7 @@ public class Drivetrain extends SubsystemBase {
 
     robotPoseEstimator.setReferencePose(m_poseEstimator.getEstimatedPosition());
     Optional<Pair<Pose3d, Double>> result = robotPoseEstimator.update();
-    if (result.isPresent() && false) {
-      if (result.get().getFirst() == null) return;
+    if (result.isPresent()) {
       m_poseEstimator.addVisionMeasurement(
         result.get().getFirst().toPose2d(),
         Timer.getFPGATimestamp() - result.get().getSecond());
