@@ -49,7 +49,7 @@ public class Drivetrain extends SubsystemBase {
   private Encoder m_leftEncoder = new Encoder(Encoders.leftAPort, Encoders.leftBPort);
   private Encoder m_rightEncoder = new Encoder(Encoders.rightAPort, Encoders.rightBPort);
   private AHRS m_gyro = new AHRS(Port.kMXP);
-  private PhotonCamera m_aprilTagCamera = new PhotonCamera("photonvision");
+  private PhotonCamera m_aprilTagCamera = new PhotonCamera("AprilTag_Cam");
 
   //TODO Fix this bullshit up
   private List<AprilTag> tags = new ArrayList<AprilTag>();
@@ -67,10 +67,10 @@ public class Drivetrain extends SubsystemBase {
     m_rightEncoder.setDistancePerPulse(Dimensions.wheelCircumferenceMeters/Encoders.PPR);
 
     //TODO and this garb
-    tags.add(new AprilTag(0, new Pose3d(new Pose2d(0,0, new Rotation2d()))));
+    tags.add(new AprilTag(1, new Pose3d(new Pose2d(5,5, new Rotation2d()))));
     aprilTagFieldLayout = new AprilTagFieldLayout(tags, 10, 10);
     camList.add(new Pair<PhotonCamera, Transform3d>(m_aprilTagCamera, Dimensions.aprilTagCameraPositionTransform));
-    robotPoseEstimator = new RobotPoseEstimator(aprilTagFieldLayout, PoseStrategy.CLOSEST_TO_REFERENCE_POSE, camList);
+    robotPoseEstimator = new RobotPoseEstimator(aprilTagFieldLayout, PoseStrategy.LOWEST_AMBIGUITY, camList);
 
     m_poseEstimator = new DifferentialDrivePoseEstimator(
       m_driveKinematics,

@@ -7,6 +7,7 @@ package frc.robot;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.networktables.NetworkTableInstance;
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -29,6 +30,14 @@ public class Robot extends TimedRobot {
     // Instantiate our RobotContainer.  This will perform all our button bindings, and put our
     // autonomous chooser on the dashboard.
     m_robotContainer = new RobotContainer();
+    if (Robot.isSimulation()) {
+      NetworkTableInstance instance = NetworkTableInstance.getDefault();
+      instance.stopServer();
+      // set the NT server if simulating this code.
+      // "localhost" for photon on desktop, or "photonvision.local" / "[ip-address]" for coprocessor
+      instance.setServer("localhost");
+      instance.startClient4("myRobot");
+    }
   }
 
   /**
