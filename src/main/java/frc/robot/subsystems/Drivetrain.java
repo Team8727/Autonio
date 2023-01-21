@@ -15,6 +15,7 @@ import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.Nat;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.math.MathUtil;
 
 
 import org.photonvision.PhotonCamera;
@@ -32,8 +33,8 @@ import edu.wpi.first.wpilibj.SerialPort.Port;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.Encoder;
 
-import frc.robot.Constants.Drivetrain.Dimensions;
-import frc.robot.Constants.Drivetrain.Encoders;
+import frc.robot.Constants.Drivetrain.*;
+import frc.robot.Constants.CanId;
 
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInLayouts;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
@@ -42,14 +43,33 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardLayout;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 
+import com.ctre.phoenix.motorcontrol.NeutralMode;
+import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
+import edu.wpi.first.wpilibj.motorcontrol.MotorControllerGroup;
+import edu.wpi.first.math.controller.SimpleMotorFeedforward;
+
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
+
 
 public class Drivetrain extends SubsystemBase {
+  private final WPI_TalonSRX m_leftLead = new WPI_TalonSRX(CanId.leftTalonLead);
+  private final WPI_TalonSRX m_leftFollow = new WPI_TalonSRX(CanId.leftTalonFollow);
+  private final WPI_TalonSRX m_rightLead = new WPI_TalonSRX(CanId.rightTalonLead);
+  private final WPI_TalonSRX m_rightFollow = new WPI_TalonSRX(CanId.rightTalonFollow);
+
+  private final MotorControllerGroup m_left = new MotorControllerGroup(m_leftLead, m_leftFollow); 
+  private final MotorControllerGroup m_right = new MotorControllerGroup(m_rightLead, m_rightFollow);
+
+  private final Encoder m_leftEncoder = new Encoder(Encoders.leftAPort, Encoders.leftBPort);
+  private final Encoder m_rightEncoder = new Encoder(Encoders.rightAPort, Encoders.rightBPort);
+  private final AHRS m_gyro = new AHRS(Port.kMXP);
+  private PhotonCamera m_aprilTagCamera = new PhotonCamera("AprilTagCam");
+
   private DifferentialDrivePoseEstimator m_poseEstimator;
-  private DifferentialDriveKinematics m_driveKinematics= new DifferentialDriveKinematics(Dimensions.trackWidthMeters);
-  private Encoder m_leftEncoder = new Encoder(Encoders.leftAPort, Encoders.leftBPort);
-  private Encoder m_rightEncoder = new Encoder(Encoders.rightAPort, Encoders.rightBPort);
-  private AHRS m_gyro = new AHRS(Port.kMXP);
-  private PhotonCamera m_aprilTagCamera = new PhotonCamera("AprilTag_Cam");
+  private SimpleMotorFeedforward m_lFeedforward = new SimpleMotorFeedforward(Feedforward.Left.kS, Feedforward.Left.kV, Feedforward.Left.kA);
+  private SimpleMotorFeedforward m_rFeedforward = new SimpleMotorFeedforward(Feedforward.Right.kS, Feedforward.Right.kV, Feedforward.Right.kA);
+  private final DifferentialDriveKinematics m_driveKinematics = new DifferentialDriveKinematics(Dimensions.trackWidthMeters);
 
   //TODO Fix this bullshit up
   private List<AprilTag> tags = new ArrayList<AprilTag>();
@@ -63,12 +83,14 @@ public class Drivetrain extends SubsystemBase {
 
   /** Creates a new Drivetrain. */
   public Drivetrain() {
+    m_left.setInverted(!Dimensions.kInvertDrive);
+    m_right.setInverted(Dimensions.kInvertDrive);
     m_leftEncoder.setDistancePerPulse(Dimensions.wheelCircumferenceMeters/Encoders.PPR);
     m_rightEncoder.setDistancePerPulse(Dimensions.wheelCircumferenceMeters/Encoders.PPR);
 
     //TODO and this garb
-    tags.add(new AprilTag(1, new Pose3d(new Pose2d(5,5, new Rotation2d()))));
-    aprilTagFieldLayout = new AprilTagFieldLayout(tags, 10, 10);
+    tags.add(new AprilTag(0, new Pose3d(new Pose2d(1, 1, new Rotation2d()))));
+    aprilTagFieldLayout = new AprilTagFieldLayout(tags,7, 5);
     camList.add(new Pair<PhotonCamera, Transform3d>(m_aprilTagCamera, Dimensions.aprilTagCameraPositionTransform));
     robotPoseEstimator = new RobotPoseEstimator(aprilTagFieldLayout, PoseStrategy.LOWEST_AMBIGUITY, camList);
 
@@ -82,6 +104,54 @@ public class Drivetrain extends SubsystemBase {
 
     shuffleBoardInit();
   }
+
+  //Enable or disable brake mode on the motors
+  public void brakeMode(boolean mode){
+    NeutralMode nMode = NeutralMode.Coast;
+    if (mode) nMode = NeutralMode.Brake;
+
+    m_leftLead.setNeutralMode(nMode);
+    m_leftFollow.setNeutralMode(nMode);
+    m_rightLead.setNeutralMode(nMode);
+    m_leftFollow.setNeutralMode(nMode);
+  }
+
+  //Simple arcade drive that uses a percentage (-1.00 to 1.00) of the max forward and angular speeds to drive the chassis at
+  public void arcadeDrive(double linearPercent, double angularPercent){
+    linearPercent = MathUtil.clamp(linearPercent, -1, 1);
+    angularPercent = MathUtil.clamp(angularPercent, -1, 1);
+
+    double maxAngularSpeed = m_driveKinematics.toChassisSpeeds(new DifferentialDriveWheelSpeeds(Rate.maxSpeed, Rate.maxSpeed)).omegaRadiansPerSecond;
+    driveChassisSpeeds(new ChassisSpeeds(Rate.maxSpeed * linearPercent, 0, maxAngularSpeed * angularPercent));
+  }
+
+  //Simple tank drive that uses a percentage (-1.00 to 1.00) of the max left and right speeds to drive the wheels at
+  public void tankDrive(double leftPercent, double rightPercent){
+    leftPercent = MathUtil.clamp(leftPercent, -1, 1);
+    rightPercent = MathUtil.clamp(rightPercent, -1 , 1);
+
+    driveWheelSpeeds(new DifferentialDriveWheelSpeeds(Rate.maxSpeed * leftPercent, Rate.maxSpeed * rightPercent));
+  }
+
+  //Set the appropriate motor voltages for a desired set of wheel speeds
+  public void driveWheelSpeeds(DifferentialDriveWheelSpeeds wheelSpeeds){
+    m_left.setVoltage(m_lFeedforward.calculate(wheelSpeeds.leftMetersPerSecond));
+    m_right.setVoltage(m_rFeedforward.calculate(wheelSpeeds.rightMetersPerSecond));
+  }
+
+  //Set the appropriate motor voltages for a desired set of linear and angular chassis speeds
+  public void driveChassisSpeeds(ChassisSpeeds chassisSpeeds){
+    driveWheelSpeeds(m_driveKinematics.toWheelSpeeds(chassisSpeeds));
+  }
+
+  //Drive the motors at a given voltage
+  public void driveVoltages(double leftVoltage, double rightVoltage){
+    m_left.setVoltage(leftVoltage);
+    m_right.setVoltage(rightVoltage);
+  }
+
+  //Utility function to map joystick input nonlinearly for driver "feel"
+  public static double NonLinear(double input){ return Math.copySign(input * input, input);}
 
   public double getLeftDistance(){
     return m_leftEncoder.getDistance();
