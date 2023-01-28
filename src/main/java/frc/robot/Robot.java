@@ -9,6 +9,17 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.networktables.NetworkTableInstance;
 
+import edu.wpi.first.math.trajectory.Trajectory;
+import edu.wpi.first.math.trajectory.TrajectoryConfig;
+import edu.wpi.first.math.trajectory.TrajectoryGenerator;
+import edu.wpi.first.math.trajectory.constraint.DifferentialDriveVoltageConstraint;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import frc.robot.Constants.Drivetrain.*;
+import java.util.List;
+import java.util.Collections;
+
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
  * each mode, as described in the TimedRobot documentation. If you change the name of this class or
@@ -16,6 +27,7 @@ import edu.wpi.first.networktables.NetworkTableInstance;
  * project.
  */
 public class Robot extends TimedRobot {
+  private int printCount = 0;
   private Command m_autonomousCommand;
 
   @SuppressWarnings("unused")
@@ -65,8 +77,29 @@ public class Robot extends TimedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {}
+  public void autonomousInit() {
+    TrajectoryConfig config =
+    new TrajectoryConfig(
+            TrajectoryConstants.kMaxSpeedMetersPerSecond,
+            TrajectoryConstants.kMaxAccelerationMetersPerSecondSquared)
+        // Add kinematics to ensure max speed is actually obeyed
+        .setKinematics(m_robotContainer.m_Drivetrain.m_driveKinematics)
+        // Apply the voltage constraint
+        .addConstraint(new DifferentialDriveVoltageConstraint(m_robotContainer.m_Drivetrain.m_lFeedforward, m_robotContainer.m_Drivetrain.m_driveKinematics, 10));
+    List<Translation2d> waypoints = Collections.emptyList();
+        Trajectory exampleTrajectory =
+  TrajectoryGenerator.generateTrajectory(
+      // Start at the origin facing the +X direction
+      new Pose2d(2.1, 1, new Rotation2d(1.57)),
+      // Pass through these two interior waypoints, making an 's' curve path
+      List.of(new Translation2d(1.6, 2), new Translation2d(2.6, 3)),
+      // End 3 meters straight ahead of where we started, facing forward
+      new Pose2d(2.1, 4, new Rotation2d(0)),
+      // Pass config
+      config);
 
+      m_robotContainer.m_Drivetrain.followPath(exampleTrajectory).schedule();
+  }
   /** This function is called periodically during autonomous. */
   @Override
   public void autonomousPeriodic() {}
@@ -85,6 +118,11 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
+    printCount = (printCount+1)%10;
+    if(printCount == 0){
+      var value = m_robotContainer.m_Sensors.getGamePiece();
+      System.out.println("Type: " + value);
+    }
   }
 
   @Override

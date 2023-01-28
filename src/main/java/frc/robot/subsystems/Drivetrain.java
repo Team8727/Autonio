@@ -22,17 +22,16 @@ import org.photonvision.PhotonCamera;
 import org.photonvision.RobotPoseEstimator;
 import org.photonvision.RobotPoseEstimator.PoseStrategy;
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
-import edu.wpi.first.apriltag.AprilTag;
 
 import java.util.ArrayList;
 import edu.wpi.first.math.Pair;
 import java.util.List;
 import java.util.Optional;
 
-import edu.wpi.first.wpilibj.SerialPort.Port;
+import edu.wpi.first.wpilibj.SPI;
 import com.kauailabs.navx.frc.AHRS;
 import edu.wpi.first.wpilibj.Encoder;
-
+import edu.wpi.first.wpilibj.Filesystem;
 import frc.robot.Constants.Drivetrain.*;
 import frc.robot.Constants.CanId;
 
@@ -47,9 +46,16 @@ import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
 import edu.wpi.first.wpilibj.motorcontrol.MotorControllerGroup;
 import edu.wpi.first.math.controller.SimpleMotorFeedforward;
+import edu.wpi.first.math.controller.PIDController;
 
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
+
+import edu.wpi.first.math.controller.RamseteController;
+import edu.wpi.first.wpilibj2.command.RamseteCommand;
+import edu.wpi.first.math.trajectory.Trajectory;
+import edu.wpi.first.wpilibj2.command.Command;
+import java.io.File;
 
 
 public class Drivetrain extends SubsystemBase {
@@ -63,16 +69,18 @@ public class Drivetrain extends SubsystemBase {
 
   private final Encoder m_leftEncoder = new Encoder(Encoders.leftAPort, Encoders.leftBPort);
   private final Encoder m_rightEncoder = new Encoder(Encoders.rightAPort, Encoders.rightBPort);
-  private final AHRS m_gyro = new AHRS(Port.kMXP);
+  private final AHRS m_gyro = new AHRS(SPI.Port.kMXP);
   private PhotonCamera m_aprilTagCamera = new PhotonCamera("AprilTagCam");
 
   private DifferentialDrivePoseEstimator m_poseEstimator;
-  private SimpleMotorFeedforward m_lFeedforward = new SimpleMotorFeedforward(Feedforward.Left.kS, Feedforward.Left.kV, Feedforward.Left.kA);
+  public SimpleMotorFeedforward m_lFeedforward = new SimpleMotorFeedforward(Feedforward.Left.kS, Feedforward.Left.kV, Feedforward.Left.kA);
   private SimpleMotorFeedforward m_rFeedforward = new SimpleMotorFeedforward(Feedforward.Right.kS, Feedforward.Right.kV, Feedforward.Right.kA);
-  private final DifferentialDriveKinematics m_driveKinematics = new DifferentialDriveKinematics(Dimensions.trackWidthMeters);
+  private PIDController m_leftPIDs = new PIDController(PIDs.Left.kP, PIDs.Left.kI, PIDs.Left.kD);
+  private PIDController m_rightPIDs = new PIDController(PIDs.Right.kP, PIDs.Right.kI, PIDs.Right.kD);
+  public final DifferentialDriveKinematics m_driveKinematics = new DifferentialDriveKinematics(Dimensions.trackWidthMeters);
+  private RamseteController m_ramseteController = new RamseteController();
 
   //TODO Fix this bullshit up
-  private List<AprilTag> tags = new ArrayList<AprilTag>();
   private AprilTagFieldLayout aprilTagFieldLayout;
   private List<Pair<PhotonCamera, Transform3d>> camList = new ArrayList<Pair<PhotonCamera, Transform3d>>();
   private RobotPoseEstimator robotPoseEstimator;
@@ -89,18 +97,23 @@ public class Drivetrain extends SubsystemBase {
     m_rightEncoder.setDistancePerPulse(Dimensions.wheelCircumferenceMeters/Encoders.PPR);
 
     //TODO and this garb
-    tags.add(new AprilTag(0, new Pose3d(new Pose2d(1, 1, new Rotation2d()))));
-    aprilTagFieldLayout = new AprilTagFieldLayout(tags,7, 5);
+    //TODO clean up this garbage
+    try{
+      aprilTagFieldLayout = new AprilTagFieldLayout(new File(Filesystem.getDeployDirectory(), "HallLayout.json").toPath());
+    }
+    catch(Exception e){
+      System.out.println("Failed to load AprilTag Layout");
+    }
     camList.add(new Pair<PhotonCamera, Transform3d>(m_aprilTagCamera, Dimensions.aprilTagCameraPositionTransform));
-    robotPoseEstimator = new RobotPoseEstimator(aprilTagFieldLayout, PoseStrategy.LOWEST_AMBIGUITY, camList);
+    robotPoseEstimator = new RobotPoseEstimator(aprilTagFieldLayout, PoseStrategy.CLOSEST_TO_REFERENCE_POSE, camList);
 
     m_poseEstimator = new DifferentialDrivePoseEstimator(
       m_driveKinematics,
       new Rotation2d(getAngle()),
       getLeftDistance(), getRightDistance(),
-      new Pose2d(3, 3, new Rotation2d(0)),
+      new Pose2d(2.1, 1, new Rotation2d(1.57)),
       new MatBuilder<>(Nat.N3(), Nat.N1()).fill(0.02, 0.02, 0.01), // Local measurement standard deviations. Left encoder, right encoder, gyro.
-      new MatBuilder<>(Nat.N3(), Nat.N1()).fill(0.1, 0.1, 0.01)); // Global measurement standard deviations. X, Y, and theta.
+      new MatBuilder<>(Nat.N3(), Nat.N1()).fill(0.1, 0.1, 0.5)); // Global measurement standard deviations. X, Y, and theta.
 
     shuffleBoardInit();
   }
@@ -150,6 +163,12 @@ public class Drivetrain extends SubsystemBase {
     m_right.setVoltage(rightVoltage);
   }
 
+  //PID Control
+  public void FeedforwardPIDControl(double leftVelocitySetpoint, double rightVelocitySetpoint){
+    m_left.setVoltage(m_leftPIDs.calculate(m_leftEncoder.getRate(), leftVelocitySetpoint) + m_lFeedforward.calculate(leftVelocitySetpoint));
+    m_right.setVoltage(m_rightPIDs.calculate(m_rightEncoder.getRate(),rightVelocitySetpoint) + m_rFeedforward.calculate(rightVelocitySetpoint));
+  }
+
   //Utility function to map joystick input nonlinearly for driver "feel"
   public static double NonLinear(double input){ return Math.copySign(input * input, input);}
 
@@ -173,6 +192,14 @@ public class Drivetrain extends SubsystemBase {
     return Units.degreesToRadians(-m_gyro.getYaw());
   }
 
+  public Pose2d getPose(){
+    return m_poseEstimator.getEstimatedPosition();
+  }
+
+  public Command followPath(Trajectory path){
+    return new RamseteCommand(path, this::getPose, m_ramseteController, m_driveKinematics, this::FeedforwardPIDControl, this);
+  }
+
   private void shuffleBoardInit(){
     m_SBSensors = m_SBTab.getLayout("Sensors", BuiltInLayouts.kList)
     .withSize(2,4)
@@ -185,13 +212,12 @@ public class Drivetrain extends SubsystemBase {
       .withPosition(2, 0);
   }
 
-
-
   @Override
   public void periodic() {
     // This method will be called once per scheduler run
+    double time = Timer.getFPGATimestamp();
     m_poseEstimator.updateWithTime(
-      Timer.getFPGATimestamp(),
+      time,
       new Rotation2d(getAngle()),
       getLeftDistance(), 
       getRightDistance());
@@ -199,10 +225,12 @@ public class Drivetrain extends SubsystemBase {
 
     robotPoseEstimator.setReferencePose(m_poseEstimator.getEstimatedPosition());
     Optional<Pair<Pose3d, Double>> result = robotPoseEstimator.update();
-    if (result.isPresent()) {
-      m_poseEstimator.addVisionMeasurement(
-        result.get().getFirst().toPose2d(),
-        Timer.getFPGATimestamp() - result.get().getSecond());
+    if (result.isPresent()){
+      if(time - (Timer.getFPGATimestamp() - result.get().getSecond()/1000) > 0){
+      //m_poseEstimator.addVisionMeasurement(
+      //  result.get().getFirst().toPose2d(),
+      //  Timer.getFPGATimestamp() - result.get().getSecond()/1000);
+      }
     }
   }
 

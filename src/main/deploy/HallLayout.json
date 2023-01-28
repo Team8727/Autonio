@@ -1,0 +1,62 @@
+{
+  "tags": [
+    {
+      "ID": 1,
+      "pose": {
+        "translation": {
+          "x": 0,
+          "y": 3.1,
+          "z": 1 
+        },
+        "rotation": {
+          "quaternion": {
+            "W": 1.0,
+            "X": 0.0,
+            "Y": 0.0,
+            "Z": 0.0
+          }
+        }
+      }
+    },
+    {
+      "ID": 2,
+      "pose": {
+        "translation": {
+          "x": 2.1,
+          "y": 6.2,
+          "z": 1
+        },
+        "rotation": {
+          "quaternion": {
+            "W": 0.7071068,
+            "X": 0.0,
+            "Y": 0.0,
+            "Z": -0.7071068
+          }
+        }
+      }
+    },
+    {
+      "ID": 3,
+      "pose": {
+        "translation": {
+          "x": 4.2,
+          "y": 3.1,
+          "z": 1
+        },
+        "rotation": {
+          "quaternion": {
+            "W": 0.0,
+            "X": 0.0,
+            "Y": 0.0,
+            "Z": 1.0
+          }
+        }
+      }
+    }
+  ],
+  "field": {
+    "length": 4.2,
+    "width": 6.2 
+  }
+}
